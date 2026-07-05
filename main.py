@@ -25,6 +25,7 @@ import obsws_python as obs2
 # ALL MISC COMMANDS BELOW
 # !death | adds a death to an obs death counter
 # !timer | starts a obs timer
+# !wl (l,w) | !wl w adds a win to the counter, !wl l adds a loss to the counter
 
 
 
@@ -40,6 +41,7 @@ MY_MIC = 'Mymic'
 FR_MIC = 'Chatfriends'
 GAME_AUDIO = 'GameAudio'
 DEATH_TEXT_SOURCE = "Death Counter"
+WINLOSE = "winlose"
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TOKEN_FILE = os.path.join(SCRIPT_DIR, 'tokens.json')
@@ -66,7 +68,8 @@ bot_id = None
 deaths = 0
 timer_running = False
 current_seconds = 0
-
+win_counter = 0
+lose_counter = 0
 
 def load_deaths():
     global deaths
@@ -94,6 +97,12 @@ def is_obs_running():
         except (psutil.NoSuchProcess, psutil.AccessDenied): pass
     return False
 
+def obs_send_helper(Source, text):
+     if cl:
+        try:
+            cl.set_input_settings(Source, {'text': f"{text}"}, overlay=True)
+        except Exception as e:
+            print(f"{RED}Failed to update OBS text: {e}{RESET}")
 
 def update_obs_death_text():
     if cl:
@@ -214,6 +223,30 @@ async def toggle_timer(cmd: ChatCommand):
     state = "STARTED" if timer_running else "PAUSED"
     print(f"{GREEN}Timer is now {state}{RESET}")
 
+
+async def wl_command(cmd: ChatCommand):
+    global win_counter
+    global lose_counter
+    if not cmd.user.mod and cmd.user.name != TARGET_CHANNEL: return
+
+    arg = cmd.parameter.strip().lower()
+    
+    if arg == 'w':
+        win_counter += 1
+        obs_send_helper(WINLOSE, f"W:{win_counter} L:{lose_counter}")
+        try: await twitch.delete_chat_message(broadcaster_id, bot_id, cmd.id)
+        except: pass
+        print(f"{GREEN}Win recorded{RESET}")
+    elif arg == 'l':
+        lose_counter += 1
+        obs_send_helper(WINLOSE, f"W:{win_counter} L:{lose_counter}")
+        try: await twitch.delete_chat_message(broadcaster_id, bot_id, cmd.id)
+        except: pass
+        print(f"{GREEN}lose recorded{RESET}")
+    else:
+        try: await twitch.delete_chat_message(broadcaster_id, bot_id, cmd.id)
+        except: pass
+
 async def timer_background_task():
     global current_seconds, timer_running
   
@@ -285,6 +318,9 @@ async def start_twitch_bot():
     
     chat.start()
     print(f"{RED}Login process complete! Bot is active.{RESET}")
+    win_counter = 0
+    lose_counter = 0
+    obs_send_helper(WINLOSE, f"W:{win_counter} L:{lose_counter}")
 
 
 async def run_main():
